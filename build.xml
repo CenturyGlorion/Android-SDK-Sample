@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="utf-8"?>
+<project name="ooVooSample" default="release">
+    <property name="oovoocore.dir" location="../../.." />
+    <property name="renderscript.opt.level" value="O0" />
+    <import file="${oovoocore.dir}/3rdparty/build/makeconfig/build-common.xml"  />
+    <property name="defines" value="" />
+
+    <!-- copy-libs -->
+    <target name="copy-libs" >
+      <!-- <ant dir="${oovoocore.dir}/project/android" antfile="build.xml" target="jar" /> -->
+      <build-sdk mode="${build.target}" keys="${defines}" />
+      <antcall target="copy-jar" />
+      <antcall target="copy-arm-so" />
+      <antcall target="copy-x86-so" />
+    </target>
+
+    <target name="clean-sdk" >
+      <build-sdk mode="clean" />
+    </target>
+
+    <target name="manifest-backup" >
+      <echo>Creating backup of AndroidManifest.xml</echo>
+      <copy file="AndroidManifest.xml" tofile="AndroidManifest.xml.antbak" preservelastmodified="true" />
+    </target>
+
+    <target name="manifest-prep" if="app.id" depends="manifest-backup" >
+      <xpath input="AndroidManifest.xml"
+             expression='/manifest/application/meta-data[@android:name="AppId"]/@android:value'
+             output="manifest.appId" default=" "/>
+
+      <xpath input="AndroidManifest.xml"
+             expression='/manifest/application/meta-data[@android:name="AppToken"]/@android:value'
+             output="manifest.appToken" default=" "/>
+
+      <echo message="Original AndroidManifest values" />
+      <echo message="Application Id:       ${manifest.appId}" />
+      <echo message="Application Token:    ${manifest.appToken}" />
+
+      <condition property="id" value="\\\\ ${app.id}" else="\\\\${manifest.appId}" >
+        <isset property="app.id" />
+      </condition>
+
+      <condition property="token" value="${app.token}" else="${manifest.appToken}" >
+        <isset property="app.token" />
+      </condition>
+
+      <replaceregexp file="AndroidManifest.xml"
+			         flags="m"
+			         match='(meta-data[\t\r\n ]*android:name="AppId"[\t\r\n ]*android:value=")[^"]*(")'
+			         replace='\1${id}\2' />
+
+      <replaceregexp file="AndroidManifest.xml"
+			         flags="m"
+			         match='(meta-data[\t\r\n ]*android:name="AppToken"[\t\r\n ]*android:value=")[^"]*(")'
+			         replace='\1${token}\2' />
+
+      <xpath input="AndroidManifest.xml"
+             expression='/manifest/application/meta-data[@android:name="AppId"]/@android:value'
+             output="manifest.appId" default="${app.id}"/>
+
+      <xpath input="AndroidManifest.xml"
+             expression='/manifest/application/meta-data[@android:name="AppToken"]/@android:value'
+             output="manifest.appToken" default="${app.token}"/>
+
+      <echo message="New AndroidManifest values" />
+      <echo message="Application Id:       ${manifest.appId}" />
+      <echo message="Application Token:    ${manifest.appToken}" />
+
+    </target>
+
+    <target name="manifest-restore" >
+      <echo>Restore AndroidManifest.xml</echo>
+      <move file="AndroidManifest.xml" tofile="AndroidManifest.xml.appid.token" preservelastmodified="true" />
+      <copy file="AndroidManifest.xml.antbak" tofile="AndroidManifest.xml" preservelastmodified="true" />
+    </target>
+
+    <!-- <target name="-pre-compile" depends="copy-libs, manifest-prep"/> -->
+    <target name="-pre-build" depends="copy-libs, manifest-prep" >
+     <!-- <build-sdk mode="${build.target}" /> -->
+    </target>
+
+    <target name="-post-build" depends="manifest-restore" />
+
+    <target name="arm" depends="debug"/>
+    <target name="x86" depends="debug"/>
+
+    <target name="local-prop" >
+       <replaceregexp file="local.properties"
+			         flags="m"
+			         match='app.id(.*)=(.*)'
+			         replace=''
+                     byline="true" />
+
+       <replaceregexp file="local.properties"
+			         flags="m"
+			         match='app.token(.*)=(.*)'
+			         replace=''
+                     byline="true" />
+    </target>
+
+    <!-- bundle -->
+    <target name="bundle" depends="local-prop,release" description="build bundle">
+      <property name="build.dir" value="${oovoocore.dir}/build" />
+      <property name="bundle" value="ooVoo-Android.${build.number}--${build.id}" />
+      <property name="bundle.dir" value="${build.dir}/${bundle}" />
+
+      <echo message="Building Bundle in directory: ${bundle.dir}" />
+      <echo message="Build number: ${build.number}" />
+      <echo message="Build ID:     ${build.id}" />
+      <echo message="" />
+      <delete dir="${build.dir}" />
+
+      <echo message="Create folder structure" />
+      <mkdir dir="${build.dir}" />
+      <mkdir dir="${bundle.dir}" />
+      <mkdir dir="${bundle.dir}/docs" />
+      <mkdir dir="${bundle.dir}/ooVooSample" />
+      <mkdir dir="${bundle.dir}/libs" />
+
+      <echo message="Copy ooVooSample project and lib" />
+      <copy todir="${bundle.dir}/ooVooSample" >
+        <fileset dir=".">
+          <exclude name="bin/**" />
+          <exclude name="local.properties" />
+        </fileset>
+      </copy>
+
+      <copy todir="${bundle.dir}/libs" >
+        <fileset dir="${oovoocore.dir}/project/android/libs" >
+          <include name="**/*.so" />
+        </fileset>
+        <fileset dir="${oovoocore.dir}/project/android/bin" >
+          <include name="**/*.jar" />
+          <exclude name="**/dexedLibs/**" />
+        </fileset>
+      </copy>
+
+      <copy todir="${bundle.dir}/docs" >
+        <fileset dir="${oovoocore.dir}/project/android/bin" >
+          <include name="**/*-doc.jar" />
+        </fileset>
+      </copy>
+
+      <echo message="zip all" />
+      <zip destfile="${bundle.dir}/${bundle}.zip"
+           basedir="${bundle.dir}"
+       />
+
+    </target>
+<!--
+    <target name="check.unsigned.apk" >
+      <condition property="unsigned.apk" >
+        <not>
+          <available file="bin/ooVooSample-release.apk" />
+        </not>
+      </condition>
+    </target>
+
+    <target name="-release-sign" depends="check.unsigned.apk" if="unsigned.apk" >
+      <signjar destDir="bin" jar="bin/ooVooSample-release-unsigned.apk"
+               alias="ooVooSample" keystore="ooVoo-release-key.keystore" storepass="ooVooSDK" />
+      <exec executable="${sdk.dir}/tools/zipalign" failonerror="true" >
+        <arg value="-v" />
+        <arg value="4" />
+        <arg value="bin/ooVooSample-release-unsigned.apk" />
+        <arg value="bin/ooVooSample-release.apk" />
+      </exec>
+    </target>
+-->
+</project>
